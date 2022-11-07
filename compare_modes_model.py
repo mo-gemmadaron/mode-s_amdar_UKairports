@@ -103,7 +103,7 @@ def main():
 
     
     # 4. Select airports
-    #airport_name_list = ['Bristol', 'Heathrow']
+    #airport_name_list = ['Aberdeen']
     
     airport_name_list = ['Heathrow', \
                          'Gatwick', \

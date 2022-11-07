@@ -45,14 +45,24 @@ def import_files(file_path, data_type, airport, date):
 def main():
 
     #---------------------------------------------------------------------
-    # 01. Set user inputs
+    # 01. Settings
     #---------------------------------------------------------------------
 
     file_path = '/data/users/gdaron/MetDB/'
-    out_path = '/data/users/gdaron/Mode-S_altitude/'
+    out_path = '/data/users/gdaron/Mode-S_altitude/Mode-S_vs_AMDAR'
 
-    start_date = datetime.date(2021,7,10)
-    end_date = datetime.date(2021,8,10)
+    if not os.path.exists(out_path):
+        os.makedirs(out_path)
+
+    period = 'winter' # summer or winter
+
+    if period == 'summer':
+    	start_date = datetime.date(2021,7,10)
+    	end_date = datetime.date(2021,8,10)
+
+    if period == 'winter':
+    	start_date = datetime.date(2022,1,1)
+    	end_date = datetime.date(2022,1,31)
 
     date_list = [start_date + timedelta(days=i) for i in range((end_date - start_date).days + 1)]
     date_list = [date_obj.strftime('%Y%m%d') for date_obj in date_list]
@@ -133,30 +143,36 @@ def main():
         
     	# Plot data (multiple days)
 
+    	start_date_reformat = start_date.strftime('%d/%m/%Y')
+    	end_date_reformat = end_date.strftime('%d/%m/%Y')
 
-
-    	start_date_reformat = start_date.strftime('%d-%m-%Y')
-    	end_date_reformat = end_date.strftime('%d-%m-%Y')
-
-    	fig2, ax2 = plt.subplots(figsize=(10,6))
-    	plt.plot(concat_modes['PESR_ALTD'], marker='.', markersize=2, color ='#1f77b4', linestyle='None', label='Mode-S pressure altitude')
-    	plt.plot(concat_amdar['ALTD'], marker='.', markersize=2, color='#d62728', linestyle='None', label='AMDAR pressure altitude')
-    	plt.plot(concat_modes_day['PESR_ALTD'], marker='.', color ='#1f77b4', linestyle='--', linewidth=2, label='Mode-S pressure altitude (daily min)')
-    	plt.plot(concat_modes_day['GNSS_ALTD'], marker='.', color ='black', linestyle='--', linewidth=2, label='Mode-S GNSS altitude (daily min)')
+    	fig2, ax2 = plt.subplots(figsize=(6,6))
+    	plt.plot(concat_modes['PESR_ALTD'], marker='.', markersize=2, color ='#1f77b4', linestyle='None', label='Mode-S')
+    	plt.plot(concat_amdar['ALTD'], marker='.', markersize=2, color='#d62728', linestyle='None', label='AMDAR')
+    	#plt.plot(concat_modes_day['PESR_ALTD'], marker='.', color ='#1f77b4', linestyle='--', linewidth=2, label='Mode-S pressure altitude (daily min)')
+    	#plt.plot(concat_modes_day['GNSS_ALTD'], marker='.', color ='black', linestyle='--', linewidth=2, label='Mode-S GNSS altitude (daily min)')
     	#plt.plot(concat_amdar_day['ALTD'], marker='.', color='#d62728', linestyle='-', linewidth=2, label='AMDAR pressure altitude (daily min)')
-    	ax2.set_xlabel('Date / time')
-    	ax2.set_ylabel('Altitude / m')
-    	plt.legend(loc='upper right', prop={'size':12}, facecolor='white')
-    	ax2.set_title('{0} airport '.format(airport)+str(start_date_reformat)+' to '+str(end_date_reformat))
-    	ax2.set_ylim([y_min, y_max])
+
+    	#ax2.set_title('{0} airport '.format(airport)+str(start_date_reformat)+' to '+str(end_date_reformat))
+    	ax2.set_title('{0} airport - {1}'.format(airport, period))
+    	ax2.set_xlabel('Date')
     	ax2.set_xlim([start_date, end_date])
-    	ax2.xaxis.set_major_formatter(dates.DateFormatter('%d-%m-%Y'))
+    	ax2.xaxis.set_major_formatter(dates.DateFormatter('%d/%m/%Y'))
+    	#ax2.xaxis.set_major_locator(dates.DayLocator(interval=7))
+    	ax2.set_xticks(np.arange(start_date, end_date, 7))
+
+    	ax2.set_ylabel('Altitude / m')
+    	ax2.set_ylim([y_min, y_max])
+
+    	plt.legend(loc='upper right', prop={'size':12}, facecolor='white')
     	ax2.axhline(y=0, xmin=0, xmax=1, linewidth =1, linestyle = '--', color='black')
-    	ax2.annotate( 'Mean daily min (Mode-S GNSS): ' + str(round(modes_GNSS_mean,0)) , xy = (10,10), xycoords = 'axes points')
+    	#ax2.annotate( 'Mean daily min (Mode-S GNSS): ' + str(round(modes_GNSS_mean,0)) , xy = (10,10), xycoords = 'axes points')
     	plt.tight_layout()
-    	plt.savefig(os.path.join(out_path, "{0}.jpg".format(airport)))
+    	plt.savefig(os.path.join(out_path, "{0}_{1}.jpg".format(airport, period)))
     	#plt.show() 
     	plt.close(fig2)
+
+    	'''
 
     	# Plot hourly minimun altitude data 
   
@@ -177,7 +193,7 @@ def main():
     	#plt.show() 
     	plt.close(fig3)
 
-    	'''   
+    	 
     	# Average min altitude by hour of day
 
     	concat_modes_hour = concat_modes_hour.reset_index()
@@ -212,7 +228,7 @@ def main():
     	plt.savefig(os.path.join(out_path, "{0}_hour_min_altd_AVG.jpg".format(airport)))
     	#plt.show() 
     	plt.close(fig4)
-    	'''
+    	
 
     	# Plot daily minimun altitude data 
   
@@ -235,6 +251,7 @@ def main():
     	plt.savefig(os.path.join(out_path, "{0}_day_min_altd.jpg".format(airport)))
     	#plt.show() 
     	plt.close(fig5)
+    	'''
 
 
 if __name__ == '__main__':
