@@ -84,23 +84,29 @@ def main():
     '''
 
     # test subplots
-    fig2, ax2 = plt.subplots(figsize=(10,15))
+    fig2, ax2 = plt.subplots(4,4,figsize=(10,12))
+    plt.subplots_adjust(hspace=0.5, wspace=0.5)
     for index, row in df_means.iterrows():
     	airport = df_means.loc[index, 'Airport']
     	ax2 = plt.subplot(4, 4, index+1)
-    	#fig1, ax1 = plt.subplots(figsize=(6,6))
-    	plt.bar(0, df_means.loc[index, 'GNSS_ALTD'], color='#1f77b4', width=wd, edgecolor='k',label='Mode-S observed daily minimum')
-    	plt.bar(0+wd, df_means.loc[index, 'min_obs_altd_exist'], color='#ff7f0e', width=wd, edgecolor='k', label='Model (existing network)')
-    	plt.bar(0+(2*wd), df_means.loc[index, 'min_obs_altd_priority'], color='#2ca02c', width=wd, edgecolor='k', label='Model (priority network)')
-    	plt.bar(0+(3*wd), df_means.loc[index, 'min_obs_altd_all'], color='#9467bd', width=wd, edgecolor='k', label='Model (full network)')
+    	plot1=plt.bar(0, df_means.loc[index, 'GNSS_ALTD'], color='#1f77b4', width=wd, edgecolor='black',label='Mode-S observed daily minimum')
+    	plot2=plt.bar(0+wd, df_means.loc[index, 'min_obs_altd_exist'], color='#ff7f0e', width=wd, edgecolor='black', label='Model (existing network)')
+    	plot3=plt.bar(0+(2*wd), df_means.loc[index, 'min_obs_altd_priority'], color='#2ca02c', width=wd, edgecolor='black', label='Model (priority network)')
+    	plot4=plt.bar(0+(3*wd), df_means.loc[index, 'min_obs_altd_all'], color='#9467bd', width=wd, edgecolor='black', label='Model (full network)')
     	plt.tick_params(axis='x', which='both', bottom=False, labelbottom=False)
 
     	ax2.set_xlabel('{0}'.format(airport))
     	ax2.set_ylabel('Altitude / m')
     	ax2.set_ylim([0, 2000])
-    #plt.legend(loc='lower center', prop={'size':12}, facecolor='white')
+
+    labels = ['Mode-S observed daily minimum','Model (existing network)','Model (priority network)','Model (full network)']  	
+    fig2.legend([plot1, plot2, plot3, plot4], bbox_to_anchor=(0.5,0.98), loc='center', prop={'size':10}, labels=labels, ncol = 4)
+    fig2.suptitle('test', fontweight = 'bold', y= 1.0, color='white')
     plt.tight_layout()
-    plt.show()
+    plt.savefig(os.path.join(file_path_stats, "Bar_chart_for_report.jpg"))
+    #plt.show()
+
+
 
 
 
