@@ -2,12 +2,12 @@
 # -*- coding: iso-8859-1 -*-
 
 '''
-visualise_altitude.py
+filter_amdar_data.py
 
-Code for plotting the altitude for Mode-S and AMDAR data near UK airports
+Code for exporting individual aircraft ascents and descents from AMDAR data
 
 To run the code:
-   ./visualise_altitude.py
+   ./filter_amdar_data.py
 
 Author: gdaron
 '''
@@ -133,48 +133,50 @@ def main():
 
     	# Filter the dataframe for aircraft number and flight phase
 
-    	aircraft_list = concat_amdar.RGSN_NMBR.unique()
-    	#aircraft_list = ["b'EU6614  '", "b'EU0627  '"]
+    	#aircraft_list = concat_amdar.RGSN_NMBR.unique()
+    	aircraft_list = ["b'EU1757  '"]
 
     	for aircraft in aircraft_list:
 
     		aircraft_df = filter_data(concat_amdar, 'RGSN_NMBR', aircraft)
-
-    		#aircraft_filter = concat_amdar['RGSN_NMBR'] == aircraft
-    		#aircraft_df = pd.DataFrame(concat_amdar.loc[aircraft_filter])
     		aircraft_df.sort_values(by = 'TIME')
 
     		phase_list = aircraft_df.FLGT_PHAS.unique()
 
     		for phase in phase_list:
-    			#phase_filter = aircraft_df['FLGT_PHAS'] == phase
-    			#phase_df = pd.DataFrame(aircraft_df.loc[phase_filter])
+
     			phase_df = filter_data(aircraft_df, 'FLGT_PHAS', phase)
     			phase_df.reset_index(inplace=True)
 
-    			#Split dataframes where the same aircraft has multiple ascents/descents (in a day)
-    			
     			select_phase = phase_df[phase_df.FLGT_PHAS == 5] # select ascent 
-    			#print(select_phase)
+
+    			#Split dataframes where the same aircraft has multiple ascents/descents (in a day)
 
     			if select_phase.empty == True:
     				pass
     			else:
 
-    				select_phase['gap'] = select_phase['TIME'].sort_values().diff() > pd.to_timedelta('1 hour')
+    				#select_phase['gap'] = select_phase['TIME'].sort_values().diff() > pd.to_timedelta('0 hours', errors='raise')
+    				select_phase['gap'] = select_phase['TIME'].diff() > pd.to_timedelta('5 minute', errors='raise')
     				select_phase[select_phase.gap]
-    				#print(select_phase)
+    				print(select_phase)
 
     				split_frames = list(split_dataframe_by_column(select_phase, "gap"))
     				#print(len(split_frames))
 
-    				if len(split_frames) == 0:
-    					print(select_phase)
+    				if len(split_frames) == 0: 
+    					select_phase.drop(['gap'], axis=1, inplace=True)
+    					if len(select_phase) > 5: # only output profiles with at least 5 points
+    						#print(select_phase)
+    						select_phase.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_ascent.csv'.format(airport, aircraft, date, )), index=False)
 
     				else:
     					for i in (1,len(split_frames)):
     						out = pd.DataFrame(split_frames[i - 1])
-    						print(out)
+    						if len(out) > 5: # only output profiles with at least 5 points
+    							out.drop(['gap'], axis=1, inplace=True)
+    							#print(out)
+    							out.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_ascent_{3}.csv'.format(airport, aircraft, date, i)), index=False)
     		
 
 if __name__ == '__main__':
