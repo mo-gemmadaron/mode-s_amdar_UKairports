@@ -84,7 +84,7 @@ def main():
 
     if period == 'summer':
     	start_date = datetime.date(2022,11,22)
-    	end_date = datetime.date(2022,11,22)
+    	end_date = datetime.date(2022,11,23)
     	#start_date = datetime.date(2021,7,10)
     	#end_date = datetime.date(2021,7,10)
 
@@ -159,7 +159,6 @@ def main():
     				#select_phase['gap'] = select_phase['TIME'].sort_values().diff() > pd.to_timedelta('0 hours', errors='raise')
     				select_phase['gap'] = select_phase['TIME'].diff() > pd.to_timedelta('5 minute', errors='raise')
     				select_phase[select_phase.gap]
-    				print(select_phase)
 
     				split_frames = list(split_dataframe_by_column(select_phase, "gap"))
     				#print(len(split_frames))
