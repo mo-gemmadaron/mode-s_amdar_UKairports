@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 from matplotlib import dates
 import datetime
 from datetime import timedelta
+import pyproj
 
 
 
@@ -140,7 +141,7 @@ def main():
 
     		for aircraft in aircraft_list:
 
-    			print(aircraft)
+    			print('Processing aircraft no: {0}'.format(aircraft))
 
     			aircraft_df = filter_data(data_amdar, 'RGSN_NMBR', aircraft)
     			aircraft_df.sort_values(by = 'TIME')
@@ -157,11 +158,9 @@ def main():
 			#Split dataframes where the same aircraft has multiple ascents/descents (in a day)
 
     			if select_phase.empty == True:
-    				print("no data")
     				pass
     			
     			else:
-    				print("some data")
     				select_phase['gap'] = select_phase['TIME'].diff() > pd.to_timedelta('5 minute') # look for gaps > 5 mins 
     				select_phase[select_phase.gap]
     				
@@ -169,15 +168,27 @@ def main():
 
     				if len(split_frames) == 0: 
     					select_phase.drop(['gap'], axis=1, inplace=True)
+
+    					if phase == 'ascent':
+    						select_phase = select_phase.sort_values(by = 'ALTD')
+    					if phase == 'descent':
+     						select_phase = select_phase.sort_values(by = 'ALTD', ascending=False)
+
     					if len(select_phase) > 5: # only output profiles with at least 5 points
-    						select_phase.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_ascent.csv'.format(airport, aircraft, date, )), index=False)
+    						select_phase.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_1.csv'.format(airport, aircraft, date, phase )), index=False)
 
     				else:
     					for i in (1,len(split_frames)):
     						out = pd.DataFrame(split_frames[i - 1])
+
+    						if phase == 'ascent':
+    							out = out.sort_values(by = 'ALTD')
+    						if phase == 'descent':
+     							out = out.sort_values(by = 'ALTD', ascending=False)
+
     						if len(out) > 5: # only output profiles with at least 5 points
     							out.drop(['gap'], axis=1, inplace=True)
-    							out.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_ascent_{3}.csv'.format(airport, aircraft, date, i)), index=False) 
+    							out.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_{4}.csv'.format(airport, aircraft, date, phase, i)), index=False) 
     				
  		
   			
