@@ -80,11 +80,37 @@ def main():
     if not os.path.exists(out_path):
         os.makedirs(out_path)
 
-    period = 'summer' # summer or winter
+    period = 'summer' # 'summer' or 'winter'
+
+    phase = 'ascent' # 'ascent' (5) or 'descent' (6)
+
+    airport_name_list = ['Heathrow_test']
+    '''
+    airport_name_list = ['Heathrow', \
+                         'Gatwick', \
+                         'Manchester', \
+                         'Stansted', \
+                         'Edinburgh', \
+                         'Birmingham', \
+                         'Bristol', \
+                         'Glasgow', \
+                         'Aberdeen', \
+                         'EastMidlands', \
+                         'LondonCity', \
+                         'BelfastInt', \
+                         'Newcastle', \
+                         'LeedsBradford', \
+                         'Liverpool',\
+                         'Cardiff']
+    '''
+
+    #---------------------------------------------------------------------    
+    # 02. Create date list
+    #---------------------------------------------------------------------
 
     if period == 'summer':
     	start_date = datetime.date(2022,11,22)
-    	end_date = datetime.date(2022,11,23)
+    	end_date = datetime.date(2022,11,22)
     	#start_date = datetime.date(2021,7,10)
     	#end_date = datetime.date(2021,7,10)
 
@@ -95,33 +121,11 @@ def main():
     date_list = [start_date + timedelta(days=i) for i in range((end_date - start_date).days + 1)]
     date_list = [date_obj.strftime('%Y%m%d') for date_obj in date_list]
 
-    airport_name_list = ['Heathrow_test']
-    '''
-    airport_name_list = ['Heathrow', \
-                     'Gatwick', \
-                     'Manchester', \
-                     'Stansted', \
-                     'Edinburgh', \
-                     'Birmingham', \
-                     'Bristol', \
-                     'Glasgow', \
-                     'Aberdeen', \
-                     'EastMidlands', \
-                     'LondonCity', \
-                     'BelfastInt', \
-                     'Newcastle', \
-                     'LeedsBradford', \
-                     'Liverpool',\
-                     'Cardiff']
-    '''
-
     #---------------------------------------------------------------------    
-    # 02. Loop through airports/dates, filter and add flags
+    # 03. Loop through airports/dates and export individual ascents/descents
     #---------------------------------------------------------------------
 
-    for airport in airport_name_list:
-
-    	concat_amdar = pd.DataFrame()
+    for airport in airport_name_list: # hopefully we can skip this step if we are looking at a large area
 
     	for date in date_list:
 
@@ -129,44 +133,43 @@ def main():
 
     		data_amdar = import_files(file_path, 'AMDARS', airport, date)
 
-    		concat_amdar = pd.concat([concat_amdar, data_amdar])
+    		# Filter the dataframe for aircraft number and flight phase
 
-    	# Filter the dataframe for aircraft number and flight phase
+    		aircraft_list = data_amdar.RGSN_NMBR.unique()
+    		#aircraft_list = ["b'EU0973  '", "b'EU3072  '", "b'EU0523  '"]
 
-    	#aircraft_list = concat_amdar.RGSN_NMBR.unique()
-    	aircraft_list = ["b'EU1757  '"]
+    		for aircraft in aircraft_list:
 
-    	for aircraft in aircraft_list:
+    			print(aircraft)
 
-    		aircraft_df = filter_data(concat_amdar, 'RGSN_NMBR', aircraft)
-    		aircraft_df.sort_values(by = 'TIME')
+    			aircraft_df = filter_data(data_amdar, 'RGSN_NMBR', aircraft)
+    			aircraft_df.sort_values(by = 'TIME')
 
-    		phase_list = aircraft_df.FLGT_PHAS.unique()
 
-    		for phase in phase_list:
-
-    			phase_df = filter_data(aircraft_df, 'FLGT_PHAS', phase)
-    			phase_df.reset_index(inplace=True)
-
-    			select_phase = phase_df[phase_df.FLGT_PHAS == 5] # select ascent 
-
-    			#Split dataframes where the same aircraft has multiple ascents/descents (in a day)
+    			if phase == 'ascent':
+    				phase_id = 5
+    			if phase == 'descent':
+    				phase_id = 6
+    			
+    			select_phase = aircraft_df[aircraft_df.FLGT_PHAS == phase_id].copy()
+    			select_phase.reset_index(inplace=True)
+    			
+			#Split dataframes where the same aircraft has multiple ascents/descents (in a day)
 
     			if select_phase.empty == True:
+    				print("no data")
     				pass
+    			
     			else:
-
-    				#select_phase['gap'] = select_phase['TIME'].sort_values().diff() > pd.to_timedelta('0 hours', errors='raise')
-    				select_phase['gap'] = select_phase['TIME'].diff() > pd.to_timedelta('5 minute', errors='raise')
+    				print("some data")
+    				select_phase['gap'] = select_phase['TIME'].diff() > pd.to_timedelta('5 minute') # look for gaps > 5 mins 
     				select_phase[select_phase.gap]
-
+    				
     				split_frames = list(split_dataframe_by_column(select_phase, "gap"))
-    				#print(len(split_frames))
 
     				if len(split_frames) == 0: 
     					select_phase.drop(['gap'], axis=1, inplace=True)
     					if len(select_phase) > 5: # only output profiles with at least 5 points
-    						#print(select_phase)
     						select_phase.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_ascent.csv'.format(airport, aircraft, date, )), index=False)
 
     				else:
@@ -174,10 +177,10 @@ def main():
     						out = pd.DataFrame(split_frames[i - 1])
     						if len(out) > 5: # only output profiles with at least 5 points
     							out.drop(['gap'], axis=1, inplace=True)
-    							#print(out)
-    							out.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_ascent_{3}.csv'.format(airport, aircraft, date, i)), index=False)
-    		
-
+    							out.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_ascent_{3}.csv'.format(airport, aircraft, date, i)), index=False) 
+    				
+ 		
+  			
 if __name__ == '__main__':
     main()
 
