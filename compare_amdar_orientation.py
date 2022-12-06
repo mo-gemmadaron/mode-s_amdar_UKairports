@@ -72,6 +72,32 @@ def import_runway_info(file_path_info):
     return(data)
 
 #-----------------------------------------------
+# Find nearest airport (This is very slow!)
+#-----------------------------------------------
+
+def find_nearest_airport(airport_info_df, airport_lat_col, airport_lon_col, lat2, lon2):
+
+    geodesic = pyproj.Geod(ellps='WGS84')
+
+    list = []
+    		
+    for i, row in airport_info_df.iterrows():
+    	lon1 = row[airport_lon_col]
+    	lat1 = row[airport_lat_col]
+
+    	fwd_azimuth,back_azimuth,distance = geodesic.inv(lon1, lat1, lon2, lat2)
+    	list.append(distance)
+    		
+    airport_info_df['distance'] = list
+  
+    airport_nearest = airport_info_df[airport_info_df.distance == airport_info_df.distance.min()]
+    to_list = airport_nearest['ident'].tolist()
+    airport_id = to_list[0]
+    
+    return(airport_id)
+
+
+#-----------------------------------------------
 # MAIN CODE
 #-----------------------------------------------
 
@@ -88,7 +114,8 @@ def main():
     if not os.path.exists(out_path):
         os.makedirs(out_path)
 
-    period = 'summer' # 'summer' or 'winter'
+    start_date = datetime.date(2022,11,22)
+    end_date = datetime.date(2022,11,22)
 
     phase = 'ascent' # 'ascent' (5) or 'descent' (6)
 
@@ -118,30 +145,19 @@ def main():
     # 02. Create date list
     #---------------------------------------------------------------------
 
-    if period == 'summer':
-    	start_date = datetime.date(2022,11,22)
-    	end_date = datetime.date(2022,11,22)
-    	#start_date = datetime.date(2021,7,10)
-    	#end_date = datetime.date(2021,7,10)
-
-    if period == 'winter':
-    	start_date = datetime.date(2022,1,1)
-    	end_date = datetime.date(2022,1,31)
-
     date_list = [start_date + timedelta(days=i) for i in range((end_date - start_date).days + 1)]
     date_list = [date_obj.strftime('%Y%m%d') for date_obj in date_list]
-    print(date_list)
 
     #---------------------------------------------------------------------    
-    # 03. Loop through airports/dates and export individual ascents/descents
+    # 03. Import airport and runway information
     #---------------------------------------------------------------------
 
     airport_info = import_airport_info(file_path_info)
-    print(airport_info)
-
     runway_info = import_runway_info(file_path_info)
-    print(runway_info)
 
+    #---------------------------------------------------------------------    
+    # 04. Loop through airports/dates and compare orientations with runway orientation of nearest airport
+    #---------------------------------------------------------------------
 
     for airport in airport_name_list: # hopefully we can skip this step if we are looking at a large area
 
@@ -150,54 +166,25 @@ def main():
     		print('Loading data for: {0} {1}'.format(airport, date))
 
     		data_amdar = import_files(file_path, airport, aircraft, date, phase)
-    		print(data_amdar)
 
-    		if phase == 'ascent':
+    		if phase == 'ascent': # choose first row
     			lat2 = data_amdar.loc[0,'LAT' ]
-    			long2 = data_amdar.loc[0,'LON' ]
-    			print(lat2)
-    			print(long2)
+    			lon2 = data_amdar.loc[0,'LON' ]
 
-    		if phase == 'descent':
+    		if phase == 'descent': # choose last row
     			lat2 = data_amdar.loc[len(data_amdar)-1,'LAT' ]
-    			long2 = data_amdar.loc[len(data_amdar)-1,'LON' ]
-    			print(lat2)
-    			print(long2)
+    			lon2 = data_amdar.loc[len(data_amdar)-1,'LON' ]
 
-    		#search for ident of nearest airport
-
-    		geodesic = pyproj.Geod(ellps='WGS84')
-
-    		list = []
-    		for i, row in airport_info.iterrows():
-    			long1 = row['longitude_deg']
-    			lat1 = row['latitude_deg']
-
-    			fwd_azimuth,back_azimuth,distance = geodesic.inv(long1, lat1, long2, lat2)
-    			list.append(distance)
-    		
-    		airport_info['distance'] = list
-  
-    		airport_nearest = airport_info[airport_info.distance == airport_info.distance.min()]
-    		#airport_id.reset_index(inplace=True)
-    		airport_id = airport_nearest['ident']
-    		test = airport_id.tolist()
-    		test2 = test[0]
-    		print(test2)
+    		airport_id = find_nearest_airport(airport_info, 'latitude_deg', 'longitude_deg', lat2, lon2)
 
     		#search for runway orientation of airport id
-    		#print(runway_info.loc[runway_info['airport_ident'] == 'EGLL'])
-    		out = runway_info.loc[runway_info['airport_ident'] == test2]
+    		out = runway_info.loc[runway_info['airport_ident'] == airport_id]
     		out.reset_index(inplace=True)
-    		print(out)
-    		test3 = out.loc[0, 'he_heading_degT']
-    		print(test3)
-
-    		data_amdar['runway_orientation'] = test3
-    		print(data_amdar)
-
+    		runway_orient = out.loc[0, 'le_heading_degT'] # choose first if more than one
+    		data_amdar['runway_orientation'] = runway_orient
     		data_amdar['difference'] = data_amdar['runway_orientation'] - data_amdar['orientation']
     		print(data_amdar)
+
 
 			
 if __name__ == '__main__':
