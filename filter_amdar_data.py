@@ -129,9 +129,13 @@ def calculate_orientation(df, lat_col, lon_col):
     	lat1 = row[lat_col]
     	long2 = row['LON2']
     	lat2 = row['LAT2']
-    	fwd_azimuth,back_azimuth,distance = geodesic.inv(long1, lat1, long2, lat2)
-    	if back_azimuth <0:
-    		back_azimuth = back_azimuth + 360
+    	
+    	if lat1 == lat2 and long1 == long2:
+    		back_azimuth = float('NaN') # don't calculate orientation if points are at the same location
+    	else:
+    		fwd_azimuth,back_azimuth,distance = geodesic.inv(long1, lat1, long2, lat2)
+    		if back_azimuth <0:
+    			back_azimuth = back_azimuth + 360
     	list.append(back_azimuth)
 
     df['orientation'] = list
@@ -170,10 +174,12 @@ def find_nearest_airport(df, phase, airport_info_df, airport_lat_col, airport_lo
     airport_info_df['distance'] = list
   
     airport_nearest = airport_info_df[airport_info_df.distance == airport_info_df.distance.min()]
-    airport_name = airport_nearest['name']
+    to_list = airport_nearest['name'].tolist()
+    airport_name = to_list[0]
+
     print('Nearest airport is: '+airport_name)
 
-    #df['nearest airport'] = airport_name
+    df['nearest airport'] = airport_name
 
     to_list = airport_nearest['ident'].tolist()
     airport_id = to_list[0]
@@ -186,18 +192,12 @@ def find_nearest_airport(df, phase, airport_info_df, airport_lat_col, airport_lo
 
 def find_runway_orientation (df, runway_info_df, airport_id):
 
-    '''
     find_runway = runway_info_df.loc[runway_info_df['airport_ident'] == airport_id]
     find_runway.reset_index(inplace=True)
-    runway_orient_he = find_runway.loc[0, 'he_heading_degT'] # choose first if more than one
-    #runway_orient_le = find_runway.loc[0, 'le_heading_degT'] # choose first if more than one
-    df['runway_orientation'] = runway_orient_he
-    df['difference'] = df['runway_orientation'] - df['orientation']
-    '''
 
-    find_runway = runway_info_df.loc[runway_info_df['airport_ident'] == airport_id]
-    find_runway.reset_index(inplace=True)
-    runway_orient_he = find_runway.loc[0, 'he_heading_degT'] # choose first if more than one (find better way to do this)
+    find_runway_longest = find_runway[find_runway.length_ft == find_runway.length_ft.max()] # choose longest runway if more than one
+    to_list = find_runway_longest['he_heading_degT'].tolist()
+    runway_orient_he = to_list[0]
 
     if runway_orient_he >=0 and runway_orient_he <180:
     	runway_orient_le = runway_orient_he + 180
@@ -234,8 +234,8 @@ def main():
 
     time_gap = '5 minutes' # used to find gaps in timeseries and separate aircraft that have multiple ascents/descents in one day
 
-    airport_name_list = ['Aberdeen']
-    '''
+    #airport_name_list = ['BelfastInt']
+    
     airport_name_list = ['Heathrow', \
                          'Gatwick', \
                          'Manchester', \
@@ -252,7 +252,7 @@ def main():
                          'LeedsBradford', \
                          'Liverpool',\
                          'Cardiff']
-    '''
+    
 
     #---------------------------------------------------------------------    
     # 02. Create date list
@@ -327,6 +327,7 @@ def main():
     						calculate_orientation(select_phase, 'LAT', 'LON')
 
     						airport_id, select_phase = find_nearest_airport(select_phase, phase, airport_info, 'latitude_deg', 'longitude_deg')
+    						print(airport_id)
 
     						find_runway_orientation (select_phase, runway_info, airport_id)
     						select_phase.drop(['index'], axis=1, inplace=True)
@@ -351,6 +352,7 @@ def main():
     							calculate_orientation(out, 'LAT', 'LON')
    
     							airport_id, out = find_nearest_airport(out, phase, airport_info, 'latitude_deg', 'longitude_deg')
+    							print(airport_id)
 
     							find_runway_orientation (out, runway_info, airport_id)
     							out.drop(['index'], axis=1, inplace=True)
