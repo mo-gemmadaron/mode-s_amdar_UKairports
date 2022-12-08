@@ -23,8 +23,11 @@ from datetime import timedelta
 import pyproj
 
 
+#-----------------------------------------------
+# Function for importing AMDAR files
+#-----------------------------------------------
 
-def import_files(file_path, data_type, airport, date):
+def import_amdar_files(file_path, data_type, airport, date):
 
     filename = '{0}/{1}/{2}/{1}_{3}.txt'.format(file_path, data_type, airport, date) 
 
@@ -44,6 +47,44 @@ def import_files(file_path, data_type, airport, date):
     return(data)
 
 
+#-----------------------------------------------
+# Function for importing airport information file
+#-----------------------------------------------
+
+def import_airport_info(file_path_info):
+
+    filename = '{0}/airports_GBonly.csv'.format(file_path_info)
+    print(filename) 
+
+    if not os.path.isfile(filename):
+        return -1
+
+    data = pd.read_csv(filename)
+
+    return(data)
+
+
+#-----------------------------------------------
+# Function for importing runway information file
+#-----------------------------------------------
+
+def import_runway_info(file_path_info):
+
+    filename = '{0}/runways.csv'.format(file_path_info)
+    print(filename) 
+
+    if not os.path.isfile(filename):
+        return -1
+
+    data = pd.read_csv(filename)
+
+    return(data)
+
+
+#-----------------------------------------------
+# Function for filtering AMDAR data
+#-----------------------------------------------
+
 def filter_data(df, column, condition):
 
     filter = df[column] == condition
@@ -52,9 +93,11 @@ def filter_data(df, column, condition):
     return(filter_df)
 
 
-def split_dataframe_by_column(df, column):
+#-----------------------------------------------
+# Function for splitting datafame where column is True
+#-----------------------------------------------
 
-    """Split a DataFrame where a column is True. Yields a number of dataframes"""
+def split_dataframe_by_column(df, column):
 
     previous_index = df.index[0]
 
@@ -68,6 +111,10 @@ def split_dataframe_by_column(df, column):
     except UnboundLocalError:
         pass # There is no split point => Ignore
 
+
+#-----------------------------------------------
+# Function for calculating the orientation of the AMDAR data between consecutive points
+#-----------------------------------------------
 
 def calculate_orientation(df, lat_col, lon_col):
 
@@ -92,6 +139,55 @@ def calculate_orientation(df, lat_col, lon_col):
     return(df)
 
 
+#-----------------------------------------------
+# Function for finding nearest airport 
+#-----------------------------------------------
+
+def find_nearest_airport(df, phase, airport_info_df, airport_lat_col, airport_lon_col):
+
+    if phase == 'ascent': # choose first row
+    	lat2 = df.loc[0,'LAT' ]
+    	lon2 = df.loc[0,'LON' ]
+
+    if phase == 'descent': # choose last row
+    	lat2 = df.loc[len(df)-1,'LAT' ]
+    	lon2 = df.loc[len(df)-1,'LON' ]
+
+    geodesic = pyproj.Geod(ellps='WGS84')
+
+    list = []
+    		
+    for i, row in airport_info_df.iterrows():
+    	lon1 = row[airport_lon_col]
+    	lat1 = row[airport_lat_col]
+
+    	fwd_azimuth,back_azimuth,distance = geodesic.inv(lon1, lat1, lon2, lat2)
+    	list.append(distance)
+    		
+    airport_info_df['distance'] = list
+  
+    airport_nearest = airport_info_df[airport_info_df.distance == airport_info_df.distance.min()]
+    print('Nearest airport is: '+airport_nearest['name'])
+    to_list = airport_nearest['ident'].tolist()
+    airport_id = to_list[0]
+    
+    return(airport_id)
+
+#-----------------------------------------------
+# Function for finding runway orienation of nearest airport 
+#-----------------------------------------------
+
+def find_runway_orientation (df, runway_info_df, airport_id):
+
+    find_runway = runway_info_df.loc[runway_info_df['airport_ident'] == airport_id]
+    find_runway.reset_index(inplace=True)
+    runway_orient = find_runway.loc[0, 'le_heading_degT'] # choose first if more than one
+    df['runway_orientation'] = runway_orient
+    df['difference'] = df['runway_orientation'] - df['orientation']
+
+    return(df)
+
+
 def main():
 
     #---------------------------------------------------------------------
@@ -99,7 +195,8 @@ def main():
     #---------------------------------------------------------------------
 
     file_path = '/data/users/gdaron/MetDB/'
-    out_path = '/data/users/gdaron/Mode-S_altitude/AMDAR_location_issue/AMDAR_filter'
+    file_path_info = '/data/users/gdaron/Mode-S_altitude/AMDAR_location_issue/Runway_orientation/AirportInfo'
+    out_path = '/data/users/gdaron/Mode-S_altitude/AMDAR_location_issue/Runway_orientation/AMDAR_filter'
 
     if not os.path.exists(out_path):
         os.makedirs(out_path)
@@ -107,9 +204,9 @@ def main():
     start_date = datetime.date(2022,11,22)
     end_date = datetime.date(2022,11,22)
 
-    phase = 'ascent' # 'ascent' (5) or 'descent' (6)
+    phase = 'descent' # 'ascent' (5) or 'descent' (6)
 
-    airport_name_list = ['Manchester_test']
+    airport_name_list = ['Manchester']
     '''
     airport_name_list = ['Heathrow', \
                          'Gatwick', \
@@ -137,16 +234,23 @@ def main():
     date_list = [date_obj.strftime('%Y%m%d') for date_obj in date_list]
 
     #---------------------------------------------------------------------    
-    # 03. Loop through airports/dates and export individual ascents/descents
+    # 03. Import airport and runway information
     #---------------------------------------------------------------------
 
-    for airport in airport_name_list: # hopefully we can skip this step if we are looking at a large area
+    airport_info = import_airport_info(file_path_info)
+    runway_info = import_runway_info(file_path_info)
+
+    #---------------------------------------------------------------------    
+    # 04. Loop through airports/dates and find individual ascents/descents
+    #---------------------------------------------------------------------
+
+    for airport in airport_name_list: 
 
     	for date in date_list:
 
     		print('Loading data for: {0} {1}'.format(airport, date))
 
-    		data_amdar = import_files(file_path, 'AMDARS', airport, date)
+    		data_amdar = import_amdar_files(file_path, 'AMDARS', airport, date)
 
     		# Filter the dataframe for aircraft number and flight phase
 
@@ -191,7 +295,12 @@ def main():
     					if len(select_phase) > 5: # only output profiles with at least 5 points
     						calculate_orientation(select_phase, 'LAT', 'LON')
     						print(select_phase)
-    						select_phase.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_1.csv'.format(airport, aircraft, date, phase )), index=False, na_rep='NaN')
+    						#select_phase.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_1.csv'.format(airport, aircraft, date, phase )), index=False, na_rep='NaN')
+    						airport_id = find_nearest_airport(select_phase, phase, airport_info, 'latitude_deg', 'longitude_deg')
+    						print(airport_id)
+
+    						find_runway_orientation (select_phase, runway_info, airport_id)
+    						print(select_phase)
 
     				else:
     					for i in (1,len(split_frames)):
@@ -205,8 +314,13 @@ def main():
     						if len(out) > 5: # only output profiles with at least 5 points
     							out.drop(['gap'], axis=1, inplace=True)
     							calculate_orientation(out, 'LAT', 'LON')
-    							out.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_{4}.csv'.format(airport, aircraft, date, phase, i)), index=False, na_rep='NaN') 
-    				
+    							print(out)
+    							#out.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_{4}.csv'.format(airport, aircraft, date, phase, i)), index=False, na_rep='NaN') 
+    							airport_id = find_nearest_airport(out, phase, airport_info, 'latitude_deg', 'longitude_deg')
+    							print(airport_id)
+
+    							find_runway_orientation (out, runway_info, airport_id)
+    							print(out)    				
  		
   			
 if __name__ == '__main__':
