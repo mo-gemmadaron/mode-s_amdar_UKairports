@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
     for airport in airport_name_list:
 
-    	root_path = '/data/users/gdaron/MetDB/AMDARS/{0}'.format(airport)
+    	root_path = '/data/users/gdaron/Mode-S_altitude/MetDB_extract/AMDARS/{0}'.format(airport)
 
     	header = "RGSN_NMBR,TIME,LAT,LON,ALTD" 
     	files = get_src_files(root_path)

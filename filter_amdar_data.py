@@ -69,23 +69,47 @@ def split_dataframe_by_column(df, column):
         pass # There is no split point => Ignore
 
 
+def calculate_orientation(df, lat_col, lon_col):
+
+    geodesic = pyproj.Geod(ellps='WGS84')
+
+    df['LAT2'] = df[lat_col].shift(1)
+    df['LON2'] = df[lon_col].shift(1)
+
+    list = []
+    for i, row in df.iterrows():
+    	long1 = row[lon_col]
+    	lat1 = row[lat_col]
+    	long2 = row['LON2']
+    	lat2 = row['LAT2']
+    	fwd_azimuth,back_azimuth,distance = geodesic.inv(long1, lat1, long2, lat2)
+    	list.append(back_azimuth)
+
+    df['orientation'] = list
+    df.drop(['LAT2'], axis=1, inplace=True)
+    df.drop(['LON2'], axis=1, inplace=True)
+    
+    return(df)
+
+
 def main():
 
     #---------------------------------------------------------------------
-    # 01. Settings
+    # 01. Settings (consider adding to command line)
     #---------------------------------------------------------------------
 
     file_path = '/data/users/gdaron/MetDB/'
-    out_path = '/data/users/gdaron/Mode-S_altitude/AMDAR_filter'
+    out_path = '/data/users/gdaron/Mode-S_altitude/AMDAR_location_issue/AMDAR_filter'
 
     if not os.path.exists(out_path):
         os.makedirs(out_path)
 
-    period = 'summer' # 'summer' or 'winter'
+    start_date = datetime.date(2022,11,22)
+    end_date = datetime.date(2022,11,22)
 
     phase = 'ascent' # 'ascent' (5) or 'descent' (6)
 
-    airport_name_list = ['Heathrow_test']
+    airport_name_list = ['Manchester_test']
     '''
     airport_name_list = ['Heathrow', \
                          'Gatwick', \
@@ -108,16 +132,6 @@ def main():
     #---------------------------------------------------------------------    
     # 02. Create date list
     #---------------------------------------------------------------------
-
-    if period == 'summer':
-    	start_date = datetime.date(2022,11,22)
-    	end_date = datetime.date(2022,11,22)
-    	#start_date = datetime.date(2021,7,10)
-    	#end_date = datetime.date(2021,7,10)
-
-    if period == 'winter':
-    	start_date = datetime.date(2022,1,1)
-    	end_date = datetime.date(2022,1,31)
 
     date_list = [start_date + timedelta(days=i) for i in range((end_date - start_date).days + 1)]
     date_list = [date_obj.strftime('%Y%m%d') for date_obj in date_list]
@@ -175,7 +189,9 @@ def main():
      						select_phase = select_phase.sort_values(by = 'ALTD', ascending=False)
 
     					if len(select_phase) > 5: # only output profiles with at least 5 points
-    						select_phase.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_1.csv'.format(airport, aircraft, date, phase )), index=False)
+    						calculate_orientation(select_phase, 'LAT', 'LON')
+    						print(select_phase)
+    						select_phase.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_1.csv'.format(airport, aircraft, date, phase )), index=False, na_rep='NaN')
 
     				else:
     					for i in (1,len(split_frames)):
@@ -188,7 +204,8 @@ def main():
 
     						if len(out) > 5: # only output profiles with at least 5 points
     							out.drop(['gap'], axis=1, inplace=True)
-    							out.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_{4}.csv'.format(airport, aircraft, date, phase, i)), index=False) 
+    							calculate_orientation(out, 'LAT', 'LON')
+    							out.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_{4}.csv'.format(airport, aircraft, date, phase, i)), index=False, na_rep='NaN') 
     				
  		
   			

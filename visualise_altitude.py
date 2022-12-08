@@ -48,7 +48,7 @@ def main():
     # 01. Settings
     #---------------------------------------------------------------------
 
-    file_path = '/data/users/gdaron/MetDB/'
+    file_path = '/data/users/gdaron/Mode-S_altitude/MetDB_extract/'
     out_path = '/data/users/gdaron/Mode-S_altitude/Mode-S_vs_AMDAR'
 
     if not os.path.exists(out_path):

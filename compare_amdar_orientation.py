@@ -28,7 +28,7 @@ import pyproj
 
 def import_files(file_path, airport, aircraft, date, phase):
 
-    filename = '{0}/AMDAR_{1}_{2}_{3}_{4}_1.csv'.format(file_path, airport, aircraft, date, phase)
+    filename = '{0}/AMDAR_{1}_{2}_{3}_{4}_1.csv'.format(file_path, airport, aircraft, date, phase) # need to fix for number at end!!!!!
     print(filename) 
 
     if not os.path.isfile(filename):
@@ -50,8 +50,7 @@ def import_airport_info(file_path_info):
     if not os.path.isfile(filename):
         return -1
 
-    type_dict = {'latitude_deg': 'float32', 'longitude_deg': 'float32'}
-    data = pd.read_csv(filename, dtype=type_dict)
+    data = pd.read_csv(filename)
 
     return(data)
 
@@ -91,6 +90,7 @@ def find_nearest_airport(airport_info_df, airport_lat_col, airport_lon_col, lat2
     airport_info_df['distance'] = list
   
     airport_nearest = airport_info_df[airport_info_df.distance == airport_info_df.distance.min()]
+    print('Nearest airport is: '+airport_nearest['name'])
     to_list = airport_nearest['ident'].tolist()
     airport_id = to_list[0]
     
@@ -119,9 +119,9 @@ def main():
 
     phase = 'ascent' # 'ascent' (5) or 'descent' (6)
 
-    airport_name_list = ['Heathrow_test'] 
+    airport_name_list = ['AREA_test'] 
 
-    aircraft = "b'EU0322  '"
+    aircraft_list = ["b'EU0149  '", "b'EU0454  '"]
     '''
     airport_name_list = ['Heathrow', \
                          'Gatwick', \
@@ -163,27 +163,29 @@ def main():
 
     	for date in date_list:
 
-    		print('Loading data for: {0} {1}'.format(airport, date))
+    		for aircraft in aircraft_list:
 
-    		data_amdar = import_files(file_path, airport, aircraft, date, phase)
+    			print('Loading data for: {0} {1} {2}'.format(airport, date, aircraft))
 
-    		if phase == 'ascent': # choose first row
-    			lat2 = data_amdar.loc[0,'LAT' ]
-    			lon2 = data_amdar.loc[0,'LON' ]
+    			data_amdar = import_files(file_path, airport, aircraft, date, phase)
 
-    		if phase == 'descent': # choose last row
-    			lat2 = data_amdar.loc[len(data_amdar)-1,'LAT' ]
-    			lon2 = data_amdar.loc[len(data_amdar)-1,'LON' ]
+    			if phase == 'ascent': # choose first row
+    				lat2 = data_amdar.loc[0,'LAT' ]
+    				lon2 = data_amdar.loc[0,'LON' ]
 
-    		airport_id = find_nearest_airport(airport_info, 'latitude_deg', 'longitude_deg', lat2, lon2)
+    			if phase == 'descent': # choose last row
+    				lat2 = data_amdar.loc[len(data_amdar)-1,'LAT' ]
+    				lon2 = data_amdar.loc[len(data_amdar)-1,'LON' ]
 
-    		#search for runway orientation of airport id
-    		out = runway_info.loc[runway_info['airport_ident'] == airport_id]
-    		out.reset_index(inplace=True)
-    		runway_orient = out.loc[0, 'le_heading_degT'] # choose first if more than one
-    		data_amdar['runway_orientation'] = runway_orient
-    		data_amdar['difference'] = data_amdar['runway_orientation'] - data_amdar['orientation']
-    		print(data_amdar)
+    			airport_id = find_nearest_airport(airport_info, 'latitude_deg', 'longitude_deg', lat2, lon2)
+
+    			#search for runway orientation of airport id
+    			out = runway_info.loc[runway_info['airport_ident'] == airport_id]
+    			out.reset_index(inplace=True)
+    			runway_orient = out.loc[0, 'le_heading_degT'] # choose first if more than one
+    			data_amdar['runway_orientation'] = runway_orient
+    			data_amdar['difference'] = data_amdar['runway_orientation'] - data_amdar['orientation']
+    			print(data_amdar)
 
 
 			
