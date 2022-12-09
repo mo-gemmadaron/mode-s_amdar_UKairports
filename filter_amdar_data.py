@@ -206,9 +206,12 @@ def find_runway_orientation (df, runway_info_df, airport_id):
     
     df['runway_orientation_he'] = runway_orient_he
     df['runway_orientation_le'] = runway_orient_le
-    df['difference_he'] = df['orientation'] -df['runway_orientation_he']
-    df['difference_le'] = df['orientation'] -df['runway_orientation_le'] 
 
+    #df['difference_he'] = df['orientation'] - df['runway_orientation_he'] # this needs fixing!
+    #df['difference_le'] = df['orientation'] - df['runway_orientation_le'] 
+
+    df['difference_he'] = (df['orientation'] - df['runway_orientation_he'] + 180 + 360) % 360 - 180 
+    df['difference_le'] = (df['orientation'] - df['runway_orientation_le'] + 180 + 360) % 360 - 180
     return(df)
 
 
@@ -226,16 +229,16 @@ def main():
         os.makedirs(out_path)
 
     start_date = datetime.date(2022,11,22)
-    end_date = datetime.date(2022,11,22)
+    end_date = datetime.date(2022,11,28)
 
     phase = 'ascent' # 'ascent' (5) or 'descent' (6)
 
-    min_points_in_profile = 5
+    min_points_in_profile = 2
 
     time_gap = '5 minutes' # used to find gaps in timeseries and separate aircraft that have multiple ascents/descents in one day
 
-    #airport_name_list = ['BelfastInt']
-    
+    airport_name_list = ['Birmingham']
+    '''
     airport_name_list = ['Heathrow', \
                          'Gatwick', \
                          'Manchester', \
@@ -252,7 +255,7 @@ def main():
                          'LeedsBradford', \
                          'Liverpool',\
                          'Cardiff']
-    
+    '''
 
     #---------------------------------------------------------------------    
     # 02. Create date list
@@ -271,6 +274,8 @@ def main():
     #---------------------------------------------------------------------    
     # 04. Loop through airports/dates and find individual ascents/descents
     #---------------------------------------------------------------------
+
+    for_hist = pd.DataFrame()
 
     for airport in airport_name_list: 
 
@@ -327,11 +332,15 @@ def main():
     						calculate_orientation(select_phase, 'LAT', 'LON')
 
     						airport_id, select_phase = find_nearest_airport(select_phase, phase, airport_info, 'latitude_deg', 'longitude_deg')
-    						print(airport_id)
 
     						find_runway_orientation (select_phase, runway_info, airport_id)
     						select_phase.drop(['index'], axis=1, inplace=True)
-    						print(select_phase)
+    						#print(select_phase)
+
+    						if phase == 'ascent':
+    							test = pd.DataFrame(select_phase.iloc[1,:])
+    							test = test.transpose()
+    							for_hist = pd.concat([for_hist, test])
 
     						select_phase.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_1.csv'.format(airport, aircraft, date, phase )), index=False, na_rep='NaN')
     						
@@ -352,13 +361,33 @@ def main():
     							calculate_orientation(out, 'LAT', 'LON')
    
     							airport_id, out = find_nearest_airport(out, phase, airport_info, 'latitude_deg', 'longitude_deg')
-    							print(airport_id)
 
     							find_runway_orientation (out, runway_info, airport_id)
     							out.drop(['index'], axis=1, inplace=True)
-    							print(out)    				
+    							#print(out)
 
-    							out.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_{4}.csv'.format(airport, aircraft, date, phase, i)), index=False, na_rep='NaN')  		
+    							if phase == 'ascent':
+    								test = pd.DataFrame(out.iloc[1,:])
+    								test = test.transpose()
+    								for_hist = pd.concat([for_hist, test])				
+
+    							out.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_{4}.csv'.format(airport, aircraft, date, phase, i)), index=False, na_rep='NaN')
+
+
+    #summarise data for plotting
+    for_hist['abs_difference_min'] = abs(for_hist[['difference_he','difference_le']]).min(axis=1)
+    for_hist.to_csv(os.path.join(out_path, 'Summary.csv'), index=False, na_rep='NaN')
+    print(for_hist)
+
+    fig1, ax1 = plt.subplots(figsize=(6,6))
+    plt.hist(for_hist['abs_difference_min'])
+    ax1.set_title('Histogram of UK AMDAR orientation difference')
+    ax1.set_xlabel('Angle (deg)')
+    ax1.set_ylabel('Count')
+    plt.tight_layout()
+    plt.savefig(os.path.join(out_path, 'Summary_hist.jpg'))
+    plt.close(fig1)
+    #plt.show()  		
   			
 if __name__ == '__main__':
     main()
