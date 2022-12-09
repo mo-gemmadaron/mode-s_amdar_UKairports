@@ -207,12 +207,41 @@ def find_runway_orientation (df, runway_info_df, airport_id):
     df['runway_orientation_he'] = runway_orient_he
     df['runway_orientation_le'] = runway_orient_le
 
-    #df['difference_he'] = df['orientation'] - df['runway_orientation_he'] # this needs fixing!
-    #df['difference_le'] = df['orientation'] - df['runway_orientation_le'] 
-
     df['difference_he'] = (df['orientation'] - df['runway_orientation_he'] + 180 + 360) % 360 - 180 
     df['difference_le'] = (df['orientation'] - df['runway_orientation_le'] + 180 + 360) % 360 - 180
     return(df)
+
+#-----------------------------------------------
+# Function for finding individual ascents/descents and comparing orientation with the runway orientation 
+#-----------------------------------------------
+
+def compare_orientation(df, phase, min_points_in_profile, airport_info_df, runway_info_df, summary_df):
+
+
+    if 'gap' in df.columns:
+    	df.drop(['gap'], axis=1, inplace=True)
+
+    if phase == 'ascent':
+    	df = df.sort_values(by = 'ALTD')
+    if phase == 'descent':
+    	df = df.sort_values(by = 'ALTD', ascending=False)
+
+    if len(df) > min_points_in_profile: 
+    	df.reset_index(inplace=True)
+
+    	calculate_orientation(df, 'LAT', 'LON')
+
+    	airport_id, df = find_nearest_airport(df, phase, airport_info_df, 'latitude_deg', 'longitude_deg')
+
+    	find_runway_orientation (df, runway_info_df, airport_id)
+    	df.drop(['index'], axis=1, inplace=True)
+
+    	if phase == 'ascent':
+    		test = pd.DataFrame(df.iloc[1,:])
+    		test = test.transpose()
+    		summary_df = pd.concat([summary_df, test])
+    
+    return(df, summary_df)					
 
 
 def main():
@@ -229,7 +258,7 @@ def main():
         os.makedirs(out_path)
 
     start_date = datetime.date(2022,11,22)
-    end_date = datetime.date(2022,11,28)
+    end_date = datetime.date(2022,11,22)
 
     phase = 'ascent' # 'ascent' (5) or 'descent' (6)
 
@@ -318,66 +347,22 @@ def main():
     				
     				split_frames = list(split_dataframe_by_column(select_phase, "gap"))
 
-    				if len(split_frames) == 0: 
-    					select_phase.drop(['gap'], axis=1, inplace=True)
-
-    					if phase == 'ascent':
-    						select_phase = select_phase.sort_values(by = 'ALTD')
-    					if phase == 'descent':
-     						select_phase = select_phase.sort_values(by = 'ALTD', ascending=False)
-
-    					if len(select_phase) > min_points_in_profile: 
-    						select_phase.reset_index(inplace=True)
-
-    						calculate_orientation(select_phase, 'LAT', 'LON')
-
-    						airport_id, select_phase = find_nearest_airport(select_phase, phase, airport_info, 'latitude_deg', 'longitude_deg')
-
-    						find_runway_orientation (select_phase, runway_info, airport_id)
-    						select_phase.drop(['index'], axis=1, inplace=True)
-    						#print(select_phase)
-
-    						if phase == 'ascent':
-    							test = pd.DataFrame(select_phase.iloc[1,:])
-    							test = test.transpose()
-    							for_hist = pd.concat([for_hist, test])
-
-    						select_phase.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_1.csv'.format(airport, aircraft, date, phase )), index=False, na_rep='NaN')
-    						
+    				if len(split_frames) == 0:
+    					select_phase, for_hist = compare_orientation(select_phase, phase, min_points_in_profile, airport_info, runway_info, for_hist)
+    					select_phase.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_1.csv'.format(airport, aircraft, date, phase )), index=False, na_rep='NaN')
 
     				else:
     					for i in (1,len(split_frames)):
-    						out = pd.DataFrame(split_frames[i - 1])
+    						split_df = pd.DataFrame(split_frames[i - 1])
 
-    						if phase == 'ascent':
-    							out = out.sort_values(by = 'ALTD')
-    						if phase == 'descent':
-     							out = out.sort_values(by = 'ALTD', ascending=False)
-
-    						if len(out) > min_points_in_profile: 
-    							out.drop(['gap'], axis=1, inplace=True)    					
-    							out.reset_index(inplace=True)
-
-    							calculate_orientation(out, 'LAT', 'LON')
-   
-    							airport_id, out = find_nearest_airport(out, phase, airport_info, 'latitude_deg', 'longitude_deg')
-
-    							find_runway_orientation (out, runway_info, airport_id)
-    							out.drop(['index'], axis=1, inplace=True)
-    							#print(out)
-
-    							if phase == 'ascent':
-    								test = pd.DataFrame(out.iloc[1,:])
-    								test = test.transpose()
-    								for_hist = pd.concat([for_hist, test])				
-
-    							out.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_{4}.csv'.format(airport, aircraft, date, phase, i)), index=False, na_rep='NaN')
+    						split_df, for_hist = compare_orientation(split_df, phase, min_points_in_profile, airport_info, runway_info, for_hist)
+    						split_df.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_1.csv'.format(airport, aircraft, date, phase )), index=False, na_rep='NaN')
 
 
     #summarise data for plotting
     for_hist['abs_difference_min'] = abs(for_hist[['difference_he','difference_le']]).min(axis=1)
     for_hist.to_csv(os.path.join(out_path, 'Summary.csv'), index=False, na_rep='NaN')
-    print(for_hist)
+    #print(for_hist)
 
     fig1, ax1 = plt.subplots(figsize=(6,6))
     plt.hist(for_hist['abs_difference_min'])
