@@ -83,6 +83,23 @@ def import_runway_info(file_path_info):
 
 
 #-----------------------------------------------
+# Function for importing aircraft identifiers
+#-----------------------------------------------
+
+def import_aircraft_id(file_path_info):
+
+    filename = '{0}/E-AMDAR Master List Dec 2021.xlsx'.format(file_path_info)
+    print(filename) 
+
+    if not os.path.isfile(filename):
+        return -1
+
+    data = pd.read_excel(filename, sheet_name='MASTER')
+
+    return(data)
+
+
+#-----------------------------------------------
 # Function for filtering AMDAR data
 #-----------------------------------------------
 
@@ -260,9 +277,9 @@ def main():
     if not os.path.exists(out_path):
         os.makedirs(out_path)
 
-    period = 'Jul18' # 'Jul13', 'Nov22', 'Jul20' or 'Jul18' (these are the periods extracted from MetDb)
+    period = 'Nov22' # 'Jul13', 'Nov22', 'Jul20' or 'Jul18' (these are the periods extracted from MetDb)
 
-    phase = 'Descent' # 'Ascent' (5) or 'Descent' (6)
+    phase = 'Ascent' # 'Ascent' (5) or 'Descent' (6)
 
     min_points_in_profile = 2
 
@@ -294,6 +311,7 @@ def main():
 
     if period == 'Nov22':
     	start_date = datetime.date(2022,11,22)
+    	#end_date = datetime.date(2022,11,23)
     	end_date = datetime.date(2022,11,28)
     if period == 'Jul20':
     	start_date = datetime.date(2020,7,22)
@@ -314,7 +332,8 @@ def main():
 
     airport_info = import_airport_info(file_path_info)
     runway_info = import_runway_info(file_path_info)
-
+    aircraft_id_info = import_aircraft_id(file_path_info)
+    
     #---------------------------------------------------------------------    
     # 04. Loop through airports/dates and find individual Ascents/Descents
     #---------------------------------------------------------------------
@@ -354,7 +373,7 @@ def main():
 			#Split dataframes where the same aircraft has multiple Ascents/Descents (in a day)
 
     			if select_phase.empty == True:
-    				print("There are no data for this aircraft and phase on this date")
+    				#print("There are no data for this aircraft and phase on this date")
     				pass
     			
     			else:
@@ -381,8 +400,8 @@ def main():
     #summarise data for plotting
     for_hist['abs_difference_min'] = abs(for_hist[['difference_he','difference_le']]).min(axis=1)
     for_hist = for_hist.sort_values(by = 'abs_difference_min', ascending=True)
-    for_hist.to_csv(os.path.join(out_path, 'Summary_{0}_{1}.csv'.format(phase, period)), index=False, na_rep='NaN')
-    #print(for_hist)
+    for_hist.reset_index(inplace=True)
+    for_hist.drop(['index'], axis=1, inplace=True)
 
     fig1, ax1 = plt.subplots(figsize=(4,4))
     bins = [0,10,20,30,40,50,60,70,80,90]
@@ -399,8 +418,73 @@ def main():
     plt.tight_layout()
     plt.savefig(os.path.join(out_path, 'Summary_hist_{0}_{1}.jpg'.format(phase, period)))
     plt.close(fig1)
-    #plt.show()  		
-  			
+    #plt.show()  
+
+    #----------------------------------------
+    #SUBSET FOR AIRLINES
+    #----------------------------------------
+    aircraft_id_list = []
+    operator_list = []
+
+
+    sub1 = "b'"
+    sub2 = "  '"
+    sub3 = "'"
+
+    for i, row in for_hist.iterrows():
+    	rgsn_nmbr = for_hist.loc[i,'RGSN_NMBR']
+    	#remove b' and spaces from aircraft id
+    	idx1 = rgsn_nmbr.index(sub1)
+    	if (rgsn_nmbr.find(sub2) == -1):
+    		idx2 = rgsn_nmbr.index(sub3)
+    	else:
+    		idx2 = rgsn_nmbr.index(sub2)
+    	aircraft_id = rgsn_nmbr[idx1 + len(sub1): idx2]
+    	aircraft_id_list.append(aircraft_id)
+
+    	find_airline = aircraft_id_info.loc[aircraft_id_info['Identifier'] == aircraft_id]
+    	to_list = find_airline['Operator ICAO'].tolist()
+    	if len(to_list) == 0:
+    		to_list = ['NaN']
+    		operator_list.append(to_list[0])
+    	else:
+    		operator_list.append(to_list[0])
+
+
+    for_hist['aircraft_id'] = aircraft_id_list
+    for_hist['operator'] = operator_list
+    for_hist.to_csv(os.path.join(out_path, 'Summary_{0}_{1}.csv'.format(phase, period)), index=False, na_rep='NaN')
+    
+    airlines = ['AFR', 'ART', 'AUA', 'BAW', 'CCM', 'CLH', 'CSA', 'DLH', 'EIN',\
+                'EWE', 'EWG', 'EZS', 'EZY', 'FIN', 'GEC', 'IAE', 'KLM', 'LOT',\
+                'RET', 'SAS', 'SBL', 'TCX', 'THY', 'VKG', 'WZZ']
+
+    for airline in airlines:
+    	subset = for_hist.loc[for_hist['operator'] == airline]
+    	if len(subset) ==0:
+    		pass
+    	else:
+    		fig2, ax2 = plt.subplots(figsize=(4,4))
+    		bins = [0,10,20,30,40,50,60,70,80,90]
+    		plt.hist(subset['abs_difference_min'], weights=np.ones(len(subset['abs_difference_min'])) / len(subset['abs_difference_min']), bins=bins)
+    		num_points = len(subset.dropna())
+    		ax2.annotate( 'No. of profiles: ' + str(num_points) , xy = (125,200), xycoords = 'axes points')
+    		ax2.set_title('{0} {1} {2}'.format(phase, period, airline))
+    		ax2.set_xlabel('Angle (deg)')
+    		ax2.set_xlim([0, 90])
+    		ax2.set_xticks(np.arange(0, 90, 10))
+    		#ax2.set_ylabel('%')
+    		plt.gca().yaxis.set_major_formatter(PercentFormatter(1))
+    		ax2.set_ylim([0, 1])
+    		plt.tight_layout()
+    		operator_out_path = out_path+'/by_operator'
+    		if not os.path.exists(operator_out_path):
+        		os.makedirs(operator_out_path)
+    		plt.savefig(os.path.join(operator_out_path, 'Operator_hist_{0}_{1}_{2}.jpg'.format(phase, period, airline)))
+    		#plt.show()
+    		plt.close(fig2)
+    		
+    	
 if __name__ == '__main__':
     main()
 
