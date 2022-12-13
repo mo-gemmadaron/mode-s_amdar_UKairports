@@ -4,7 +4,7 @@
 '''
 filter_amdar_data.py
 
-Code for exporting individual aircraft ascents and descents from AMDAR data
+Code for exporting individual aircraft Ascents and Descents from AMDAR data
 
 To run the code:
    ./filter_amdar_data.py
@@ -21,6 +21,7 @@ from matplotlib import dates
 import datetime
 from datetime import timedelta
 import pyproj
+from matplotlib.ticker import PercentFormatter
 
 
 #-----------------------------------------------
@@ -53,7 +54,7 @@ def import_amdar_files(file_path, data_type, airport, date):
 
 def import_airport_info(file_path_info):
 
-    filename = '{0}/airports_GBonly.csv'.format(file_path_info)
+    filename = '{0}/airports_GBonly_study.csv'.format(file_path_info)
     print(filename) 
 
     if not os.path.isfile(filename):
@@ -151,12 +152,11 @@ def calculate_orientation(df, lat_col, lon_col):
 
 def find_nearest_airport(df, phase, airport_info_df, airport_lat_col, airport_lon_col):
 
-    if phase == 'ascent': # choose first row
+    if phase == 'Ascent': # choose first row
     	lat2 = df.loc[0,'LAT' ]
     	lon2 = df.loc[0,'LON' ]
 
-    if phase == 'descent': # choose last row
-    	print(len(df)-1)
+    if phase == 'Descent': # choose last row
     	lat2 = df.loc[len(df)-1,'LAT' ]
     	lon2 = df.loc[len(df)-1,'LON' ]
 
@@ -212,7 +212,7 @@ def find_runway_orientation (df, runway_info_df, airport_id):
     return(df)
 
 #-----------------------------------------------
-# Function for finding individual ascents/descents and comparing orientation with the runway orientation 
+# Function for finding individual Ascents/Descents and comparing orientation with the runway orientation 
 #-----------------------------------------------
 
 def compare_orientation(df, phase, min_points_in_profile, airport_info_df, runway_info_df, summary_df):
@@ -221,25 +221,28 @@ def compare_orientation(df, phase, min_points_in_profile, airport_info_df, runwa
     if 'gap' in df.columns:
     	df.drop(['gap'], axis=1, inplace=True)
 
-    if phase == 'ascent':
+    if phase == 'Ascent':
     	df = df.sort_values(by = 'ALTD')
-    if phase == 'descent':
+    if phase == 'Descent':
     	df = df.sort_values(by = 'ALTD', ascending=False)
 
-    if len(df) > min_points_in_profile: 
-    	df.reset_index(inplace=True)
+    df.reset_index(inplace=True)
 
-    	calculate_orientation(df, 'LAT', 'LON')
+    calculate_orientation(df, 'LAT', 'LON')
 
-    	airport_id, df = find_nearest_airport(df, phase, airport_info_df, 'latitude_deg', 'longitude_deg')
+    airport_id, df = find_nearest_airport(df, phase, airport_info_df, 'latitude_deg', 'longitude_deg')
 
-    	find_runway_orientation (df, runway_info_df, airport_id)
-    	df.drop(['index'], axis=1, inplace=True)
+    find_runway_orientation (df, runway_info_df, airport_id)
+    df.drop(['index'], axis=1, inplace=True)
 
-    	if phase == 'ascent':
-    		test = pd.DataFrame(df.iloc[1,:])
-    		test = test.transpose()
-    		summary_df = pd.concat([summary_df, test])
+    if phase == 'Ascent':
+    	test = pd.DataFrame(df.iloc[1,:])
+    	test = test.transpose()
+    if phase == 'Descent':
+    	test = pd.DataFrame(df.iloc[len(df)-1,:])
+    	test = test.transpose()
+
+    summary_df = pd.concat([summary_df, test])
     
     return(df, summary_df)					
 
@@ -257,17 +260,16 @@ def main():
     if not os.path.exists(out_path):
         os.makedirs(out_path)
 
-    start_date = datetime.date(2022,11,22)
-    end_date = datetime.date(2022,11,22)
+    period = 'Jul18' # 'Jul13', 'Nov22', 'Jul20' or 'Jul18' (these are the periods extracted from MetDb)
 
-    phase = 'ascent' # 'ascent' (5) or 'descent' (6)
+    phase = 'Descent' # 'Ascent' (5) or 'Descent' (6)
 
     min_points_in_profile = 2
 
-    time_gap = '5 minutes' # used to find gaps in timeseries and separate aircraft that have multiple ascents/descents in one day
+    time_gap = '5 minutes' # used to find gaps in timeseries and separate aircraft that have multiple Ascents/Descents in one day
 
-    airport_name_list = ['Birmingham']
-    '''
+    #airport_name_list = ['Gatwick']
+    
     airport_name_list = ['Heathrow', \
                          'Gatwick', \
                          'Manchester', \
@@ -284,11 +286,24 @@ def main():
                          'LeedsBradford', \
                          'Liverpool',\
                          'Cardiff']
-    '''
+    
 
     #---------------------------------------------------------------------    
     # 02. Create date list
     #---------------------------------------------------------------------
+
+    if period == 'Nov22':
+    	start_date = datetime.date(2022,11,22)
+    	end_date = datetime.date(2022,11,28)
+    if period == 'Jul20':
+    	start_date = datetime.date(2020,7,22)
+    	end_date = datetime.date(2020,7,28)
+    if period == 'Jul18':
+    	start_date = datetime.date(2018,7,22)
+    	end_date = datetime.date(2018,7,28)
+    if period == 'Jul13':
+    	start_date = datetime.date(2013,7,22)
+    	end_date = datetime.date(2013,7,28)
 
     date_list = [start_date + timedelta(days=i) for i in range((end_date - start_date).days + 1)]
     date_list = [date_obj.strftime('%Y%m%d') for date_obj in date_list]
@@ -301,7 +316,7 @@ def main():
     runway_info = import_runway_info(file_path_info)
 
     #---------------------------------------------------------------------    
-    # 04. Loop through airports/dates and find individual ascents/descents
+    # 04. Loop through airports/dates and find individual Ascents/Descents
     #---------------------------------------------------------------------
 
     for_hist = pd.DataFrame()
@@ -326,9 +341,9 @@ def main():
     			aircraft_df.sort_values(by = 'TIME')
 
 
-    			if phase == 'ascent':
+    			if phase == 'Ascent':
     				phase_id = 5
-    			if phase == 'descent':
+    			if phase == 'Descent':
     				phase_id = 6
     			
     			select_phase = aircraft_df[aircraft_df.FLGT_PHAS == phase_id].copy()
@@ -336,9 +351,10 @@ def main():
 
     			select_phase.reset_index(inplace=True)
     			
-			#Split dataframes where the same aircraft has multiple ascents/descents (in a day)
+			#Split dataframes where the same aircraft has multiple Ascents/Descents (in a day)
 
     			if select_phase.empty == True:
+    				print("There are no data for this aircraft and phase on this date")
     				pass
     			
     			else:
@@ -348,29 +364,40 @@ def main():
     				split_frames = list(split_dataframe_by_column(select_phase, "gap"))
 
     				if len(split_frames) == 0:
-    					select_phase, for_hist = compare_orientation(select_phase, phase, min_points_in_profile, airport_info, runway_info, for_hist)
-    					select_phase.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_1.csv'.format(airport, aircraft, date, phase )), index=False, na_rep='NaN')
+    					if len(select_phase) > min_points_in_profile:
+    						select_phase, for_hist = compare_orientation(select_phase, phase, min_points_in_profile, airport_info, runway_info, for_hist)
+    						#select_phase.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_1.csv'.format(airport, aircraft, date, phase )), \
+                                                                    #index=False, na_rep='NaN')
 
     				else:
     					for i in (1,len(split_frames)):
     						split_df = pd.DataFrame(split_frames[i - 1])
-
-    						split_df, for_hist = compare_orientation(split_df, phase, min_points_in_profile, airport_info, runway_info, for_hist)
-    						split_df.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_1.csv'.format(airport, aircraft, date, phase )), index=False, na_rep='NaN')
+    						if len(split_df) > min_points_in_profile:
+    							split_df, for_hist = compare_orientation(split_df, phase, min_points_in_profile, airport_info, runway_info, for_hist)
+    							#split_df.to_csv(os.path.join(out_path, 'AMDAR_{0}_{1}_{2}_{3}_1.csv'.format(airport, aircraft, date, phase )), \
+                                                                        #index=False, na_rep='NaN')
 
 
     #summarise data for plotting
     for_hist['abs_difference_min'] = abs(for_hist[['difference_he','difference_le']]).min(axis=1)
-    for_hist.to_csv(os.path.join(out_path, 'Summary.csv'), index=False, na_rep='NaN')
+    for_hist = for_hist.sort_values(by = 'abs_difference_min', ascending=True)
+    for_hist.to_csv(os.path.join(out_path, 'Summary_{0}_{1}.csv'.format(phase, period)), index=False, na_rep='NaN')
     #print(for_hist)
 
-    fig1, ax1 = plt.subplots(figsize=(6,6))
-    plt.hist(for_hist['abs_difference_min'])
-    ax1.set_title('Histogram of UK AMDAR orientation difference')
+    fig1, ax1 = plt.subplots(figsize=(4,4))
+    bins = [0,10,20,30,40,50,60,70,80,90]
+    plt.hist(for_hist['abs_difference_min'], weights=np.ones(len(for_hist['abs_difference_min'])) / len(for_hist['abs_difference_min']), bins=bins)
+    num_points = len(for_hist.dropna())
+    ax1.annotate( 'No. of profiles: ' + str(num_points) , xy = (125,200), xycoords = 'axes points')
+    ax1.set_title('{0} {1}'.format(phase, period))
     ax1.set_xlabel('Angle (deg)')
-    ax1.set_ylabel('Count')
+    ax1.set_xlim([0, 90])
+    ax1.set_xticks(np.arange(0, 90, 10))
+    #ax1.set_ylabel('%')
+    plt.gca().yaxis.set_major_formatter(PercentFormatter(1))
+    ax1.set_ylim([0, 1])
     plt.tight_layout()
-    plt.savefig(os.path.join(out_path, 'Summary_hist.jpg'))
+    plt.savefig(os.path.join(out_path, 'Summary_hist_{0}_{1}.jpg'.format(phase, period)))
     plt.close(fig1)
     #plt.show()  		
   			
