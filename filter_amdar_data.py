@@ -4,7 +4,7 @@
 '''
 filter_amdar_data.py
 
-Code for exporting individual aircraft Ascents and Descents from AMDAR data
+Code for investigating individual aircraft Ascents and Descents from AMDAR data and comparing with the corresponding runway orientation
 
 To run the code:
    ./filter_amdar_data.py
@@ -112,7 +112,7 @@ def filter_data(df, column, condition):
 
 
 #-----------------------------------------------
-# Function for splitting datafame where column is True
+# Function for splitting datafame where column is True (based on selected time gap)
 #-----------------------------------------------
 
 def split_dataframe_by_column(df, column):
@@ -191,29 +191,40 @@ def find_nearest_airport(df, phase, airport_info_df, airport_lat_col, airport_lo
     airport_info_df['distance'] = list
   
     airport_nearest = airport_info_df[airport_info_df.distance == airport_info_df.distance.min()]
-    to_list = airport_nearest['name'].tolist()
+
+    to_list = airport_nearest['name'].tolist() # get name of nearest airport (convert to list to remove index)
     airport_name = to_list[0]
-
     print('Nearest airport is: '+airport_name)
-
     df['nearest airport'] = airport_name
 
-    to_list = airport_nearest['ident'].tolist()
+    to_list = airport_nearest['ident'].tolist() # get ID of nearest airport (convert to list to remove index)
     airport_id = to_list[0]
     
     return(airport_id, df)
 
 #-----------------------------------------------
-# Function for finding runway orienation of nearest airport 
+# Function for finding runway orientation of nearest airport 
 #-----------------------------------------------
 
 def find_runway_orientation (df, runway_info_df, airport_id):
-
+    
     find_runway = runway_info_df.loc[runway_info_df['airport_ident'] == airport_id]
     find_runway.reset_index(inplace=True)
+    
+    '''
+    #CAN WE IMPROVE THE SELECTION OF THE RIGHT RUNWAY? TO DO
+    runway_list = find_runway['he_heading_degT'].tolist()
+    print(runway_list)
+
+    for runway_orient_he in runway_list:
+    	if runway_orient_he >=0 and runway_orient_he <180:
+    		runway_orient_le = runway_orient_he + 180
+    	else:
+    		runway_orient_le = runway_orient_he - 180
+    '''
 
     find_runway_longest = find_runway[find_runway.length_ft == find_runway.length_ft.max()] # choose longest runway if more than one
-    to_list = find_runway_longest['he_heading_degT'].tolist()
+    to_list = find_runway_longest['he_heading_degT'].tolist() # convert to list to remove index
     runway_orient_he = to_list[0]
 
     if runway_orient_he >=0 and runway_orient_he <180:
@@ -227,15 +238,15 @@ def find_runway_orientation (df, runway_info_df, airport_id):
     df['difference_he'] = (df['orientation'] - df['runway_orientation_he'] + 180 + 360) % 360 - 180 
     df['difference_le'] = (df['orientation'] - df['runway_orientation_le'] + 180 + 360) % 360 - 180
     return(df)
-
+    
 #-----------------------------------------------
-# Function for finding individual Ascents/Descents and comparing orientation with the runway orientation 
+# Function for finding individual Ascents/Descents and comparing orientation with the runway orientation (calls other functions)
 #-----------------------------------------------
 
 def compare_orientation(df, phase, min_points_in_profile, airport_info_df, runway_info_df, summary_df):
 
 
-    if 'gap' in df.columns:
+    if 'gap' in df.columns: # present if dataframe has been split
     	df.drop(['gap'], axis=1, inplace=True)
 
     if phase == 'Ascent':
@@ -245,27 +256,87 @@ def compare_orientation(df, phase, min_points_in_profile, airport_info_df, runwa
 
     df.reset_index(inplace=True)
 
+    # call function to calculate the orientation of the AMDAR data
     calculate_orientation(df, 'LAT', 'LON')
 
+    # call function to identify the nearest airport
     airport_id, df = find_nearest_airport(df, phase, airport_info_df, 'latitude_deg', 'longitude_deg')
 
+    # call function to get runway orientation for nearest airport and calculate difference to AMDAR
     find_runway_orientation (df, runway_info_df, airport_id)
+    
     df.drop(['index'], axis=1, inplace=True)
-
+    '''
+    # CHECK IF FIRST TWO POINTS OF ASCENT ARE AT THE SAME LOCATION AND CHOOSE NEXT PAIR IF SO
+    if phase == 'Ascent':
+    	lat1 = df.loc[1,'LAT']
+    	lat2 = df.loc[2,'LAT']
+    	lon1 = df.loc[1,'LON']
+    	lon2 = df.loc[2,'LON']
+    	if lat1 == lat2 and lon1 == lon2:
+    		test = pd.DataFrame(df.iloc[2,:])
+    	else:
+    		test = pd.DataFrame(df.iloc[1,:])
+    	test = test.transpose()
+    if phase == 'Descent':
+    	test = pd.DataFrame(df.iloc[len(df)-1,:])
+    	test = test.transpose()
+    '''
+    
+    # JUST CHOOSE FIRST AND LAST TWO POINTS
     if phase == 'Ascent':
     	test = pd.DataFrame(df.iloc[1,:])
     	test = test.transpose()
     if phase == 'Descent':
     	test = pd.DataFrame(df.iloc[len(df)-1,:])
     	test = test.transpose()
-
+    
     summary_df = pd.concat([summary_df, test])
     
-    return(df, summary_df)					
+    return(df, summary_df)
+
+
+#-----------------------------------------------
+# Function for adding flight operator to table
+#-----------------------------------------------
+
+def add_operator(summary_df, aircraft_id_info):
+
+    aircraft_id_list = []
+    operator_list = []
+
+    sub1 = "b'"
+    sub2 = "  '"
+    sub3 = "'"
+
+    for i, row in summary_df.iterrows(): #remove b' and spaces from aircraft id
+    	rgsn_nmbr = summary_df.loc[i,'RGSN_NMBR'] 
+    	idx1 = rgsn_nmbr.index(sub1)
+    	if (rgsn_nmbr.find(sub2) == -1):
+    		idx2 = rgsn_nmbr.index(sub3)
+    	else:
+    		idx2 = rgsn_nmbr.index(sub2)
+    	aircraft_id = rgsn_nmbr[idx1 + len(sub1): idx2]
+    	aircraft_id_list.append(aircraft_id)
+
+    	find_airline = aircraft_id_info.loc[aircraft_id_info['Identifier'] == aircraft_id]
+    	to_list = find_airline['Operator ICAO'].tolist()
+    	if len(to_list) == 0:
+    		to_list = ['NaN']
+    		operator_list.append(to_list[0])
+    	else:
+    		operator_list.append(to_list[0])
+
+
+    summary_df['aircraft_id'] = aircraft_id_list
+    summary_df['operator'] = operator_list
+
+    return(summary_df)
 
 
 def main():
 
+    # *******MAIN CODE********
     #---------------------------------------------------------------------
     # 01. Settings (consider adding to command line)
     #---------------------------------------------------------------------
@@ -285,7 +356,7 @@ def main():
 
     time_gap = '5 minutes' # used to find gaps in timeseries and separate aircraft that have multiple Ascents/Descents in one day
 
-    #airport_name_list = ['Gatwick']
+    #airport_name_list = ['Aberdeen']
     
     airport_name_list = ['Heathrow', \
                          'Gatwick', \
@@ -359,7 +430,6 @@ def main():
     			aircraft_df = filter_data(data_amdar, 'RGSN_NMBR', aircraft)
     			aircraft_df.sort_values(by = 'TIME')
 
-
     			if phase == 'Ascent':
     				phase_id = 5
     			if phase == 'Descent':
@@ -370,10 +440,9 @@ def main():
 
     			select_phase.reset_index(inplace=True)
     			
-			#Split dataframes where the same aircraft has multiple Ascents/Descents (in a day)
+			# Split dataframes where the same aircraft has multiple Ascents/Descents (in a day)
 
     			if select_phase.empty == True:
-    				#print("There are no data for this aircraft and phase on this date")
     				pass
     			
     			else:
@@ -397,7 +466,9 @@ def main():
                                                                         #index=False, na_rep='NaN')
 
 
-    #summarise data for plotting
+    #---------------------------------------------------------------------    
+    # 05. Summarise data for plotting
+    #---------------------------------------------------------------------
     for_hist['abs_difference_min'] = abs(for_hist[['difference_he','difference_le']]).min(axis=1)
     for_hist = for_hist.sort_values(by = 'abs_difference_min', ascending=True)
     for_hist.reset_index(inplace=True)
@@ -412,7 +483,6 @@ def main():
     ax1.set_xlabel('Angle (deg)')
     ax1.set_xlim([0, 90])
     ax1.set_xticks(np.arange(0, 90, 10))
-    #ax1.set_ylabel('%')
     plt.gca().yaxis.set_major_formatter(PercentFormatter(1))
     ax1.set_ylim([0, 1])
     plt.tight_layout()
@@ -421,38 +491,11 @@ def main():
     #plt.show()  
 
     #----------------------------------------
-    #SUBSET FOR AIRLINES
+    # 06. Subset data for individual airlines
     #----------------------------------------
-    aircraft_id_list = []
-    operator_list = []
 
+    add_operator(for_hist, aircraft_id_info)
 
-    sub1 = "b'"
-    sub2 = "  '"
-    sub3 = "'"
-
-    for i, row in for_hist.iterrows():
-    	rgsn_nmbr = for_hist.loc[i,'RGSN_NMBR']
-    	#remove b' and spaces from aircraft id
-    	idx1 = rgsn_nmbr.index(sub1)
-    	if (rgsn_nmbr.find(sub2) == -1):
-    		idx2 = rgsn_nmbr.index(sub3)
-    	else:
-    		idx2 = rgsn_nmbr.index(sub2)
-    	aircraft_id = rgsn_nmbr[idx1 + len(sub1): idx2]
-    	aircraft_id_list.append(aircraft_id)
-
-    	find_airline = aircraft_id_info.loc[aircraft_id_info['Identifier'] == aircraft_id]
-    	to_list = find_airline['Operator ICAO'].tolist()
-    	if len(to_list) == 0:
-    		to_list = ['NaN']
-    		operator_list.append(to_list[0])
-    	else:
-    		operator_list.append(to_list[0])
-
-
-    for_hist['aircraft_id'] = aircraft_id_list
-    for_hist['operator'] = operator_list
     for_hist.to_csv(os.path.join(out_path, 'Summary_{0}_{1}.csv'.format(phase, period)), index=False, na_rep='NaN')
     
     airlines = ['AFR', 'ART', 'AUA', 'BAW', 'CCM', 'CLH', 'CSA', 'DLH', 'EIN',\
@@ -466,6 +509,7 @@ def main():
     	else:
     		fig2, ax2 = plt.subplots(figsize=(4,4))
     		bins = [0,10,20,30,40,50,60,70,80,90]
+    		#subset = subset.dropna()
     		plt.hist(subset['abs_difference_min'], weights=np.ones(len(subset['abs_difference_min'])) / len(subset['abs_difference_min']), bins=bins)
     		num_points = len(subset.dropna())
     		ax2.annotate( 'No. of profiles: ' + str(num_points) , xy = (125,200), xycoords = 'axes points')
@@ -473,7 +517,6 @@ def main():
     		ax2.set_xlabel('Angle (deg)')
     		ax2.set_xlim([0, 90])
     		ax2.set_xticks(np.arange(0, 90, 10))
-    		#ax2.set_ylabel('%')
     		plt.gca().yaxis.set_major_formatter(PercentFormatter(1))
     		ax2.set_ylim([0, 1])
     		plt.tight_layout()
